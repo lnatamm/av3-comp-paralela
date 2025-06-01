@@ -1,44 +1,118 @@
+import threading
+import socket
+
 class Solver:
-    def __init__(self):
-        pass
+    def __init__(self, host='localhost', port=8080, number_of_retries=5):
+        self.host = host
+        self.port = port
+        self.number_of_retries = number_of_retries
+
+    # # Fecha o socket quando o objeto é destruído
+    # def __del__(self):
+    #     if hasattr(self, 'socket'):
+    #         self.stop()
+    #     else:
+    #         print("Socket was not initialized.")
+
+    # # Inicia o socket e estabelece a conexão com o servidor
+    # def start(self):
+    #     # Cria um socket utilizando o protocolo IPv4 (AF_INET) e TCP (SOCK_STREAM)
+    #     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    #     # Estabelece a conexão com o servidor usando o host e a porta fornecidos
+    #     self.socket.connect((self.host, self.port))
+    
+    # # Fecha o socket
+    # def stop(self):
+    #     self.socket.close()
+    #     print("Socket closed.")
 
     def send_vectors_to_server(self, vector_x, vector_y):
-        pass
+        # Validação dos vetores
+        if len(vector_x) != len(vector_y):
+            raise ValueError("Vectors must be of the same length")
+        
+        # Converte os vetores para o formato de string para envio
+        vector_x_str = self.__stringfy_vector(vector_x)
+        vector_y_str = self.__stringfy_vector(vector_y)
+        
+        # Envia a mensagem com os vetores para o servidor resolver
+        message = f"{vector_x_str};{vector_y_str}"
+
+        # Criar socket temporário para esta thread
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((self.host, self.port))
+            sock.sendall(message.encode())
+
+            # Recebe a resposta do servidor
+            print("Waiting for response from server...")
+            data = sock.recv(1024)
+            retries = 0
+            # Tenta receber a resposta do servidor, com um número máximo de tentativas
+            while retries < self.number_of_retries and not data:
+                print(f"Retry {retries + 1}/{self.number_of_retries}: No data received, retrying...")
+                data = sock.recv(1024)
+                retries += 1
+                print("Waiting for response from server...")
+
+            # Se não receber dados após o número máximo de tentativas, levanta uma exceção
+            if not data:
+                print(f"Retry {retries}/{self.number_of_retries}: No data received from server, raising exception.")
+                print("Exception occurred during multiplication of vectors: ")
+                print(f"Vector X: {vector_x}, Vector Y: {vector_y}")
+                raise Exception("No data received from server after multiple retries.")
+            
+            print("Response received from server!")
+            # Converte a resposta recebida do servidor de volta para um número float
+            response = float(data.decode())
+            print(f"Response from server: {response}")
+            # Retorna o resultado da multiplicação
+            return response
+        
+        raise Exception("Failed to connect to the server or receive data.")
+
+        
+
+    def __stringfy_vector(self, vector):
+        """Converts a vector to a string format for sending."""
+        return ','.join(map(str, vector))
 
     def multiply_matrices(self, M_1, M_2):
+
+        # Armazena as dimensões das matrizes M_1 e M_2
         n_1, m_1 = len(M_1), len(M_1[0])
         n_2, m_2 = len(M_2), len(M_2[0])
+        
+        # Verifica se as dimensões das matrizes são compatíveis para multiplicação
         if m_1 != n_2:
             raise ValueError("Number of columns in the first matrix must equal number of rows in the second matrix")
         
-        results = []
+        # Inicializa a matriz de resultados com zeros
+        results = [[0] * m_2 for _ in range(n_1)]
+        # Cria uma lista de threads para realizar a multiplicação de forma concorrente
+        threads = []
+
+        # Função que será executada por cada thread para enviar os vetores ao servidor e anotar o resultado na matriz de resultados
+        def worker(i, j, vector_x, vector_y):
+            result = self.send_vectors_to_server(vector_x, vector_y)
+            results[i][j] = result
 
         for i in range(n_1):
+            # Para cada linha da primeira matriz, pega o vetor correspondente
             vector_x = M_1[i]
             for j in range(m_2):
+                # Para cada coluna da segunda matriz, pega o vetor correspondente
                 vector_y = [M_2[k][j] for k in range(n_2)]
-                # TODO: Send both vectors to the server for multiplication
-                results.append(self.send_vectors_to_server(vector_x, vector_y))
+                # Cria uma nova thread para enviar os vetores ao servidor e armazenar o resultado
+                t = threading.Thread(target=worker, args=(i, j, vector_x, vector_y))
+                # Inicia a thread
+                t.start()
+                # Adiciona a thread à lista de threads para posteriormente aguardar sua conclusão
+                threads.append(t)
 
-        product = []
-        for i in range(n_1):
-            product.append([0] * m_2)
+        # Aguarda todas as threads terminarem
+        for t in threads:
+            # Esse método bloqueia a execução até que a thread termine
+            t.join()
 
-        #TODO: Mount the results
-
-
-    # Cliente
-    # import socket
-
-    # HOST = 'localhost'
-    # PORT = 8080
-
-    # # Cria o socket
-    # with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-    #     # Conecta ao servidor
-    #     s.connect((HOST, PORT))
-    #     # Envia dados para o servidor
-    #     s.sendall(b"Hello, server!")
-    #     # Recebe dados do servidor
-    #     data = s.recv(1024)
-    #     print(f"Recebido: {data.decode()}")
+        # Retorna a matriz de resultados após todas as threads terem completado a multiplicação
+        return results
