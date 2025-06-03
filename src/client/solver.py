@@ -7,25 +7,6 @@ class Solver:
         self.port = port
         self.number_of_retries = number_of_retries
 
-    # # Fecha o socket quando o objeto é destruído
-    # def __del__(self):
-    #     if hasattr(self, 'socket'):
-    #         self.stop()
-    #     else:
-    #         print("Socket was not initialized.")
-
-    # # Inicia o socket e estabelece a conexão com o servidor
-    # def start(self):
-    #     # Cria um socket utilizando o protocolo IPv4 (AF_INET) e TCP (SOCK_STREAM)
-    #     self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    #     # Estabelece a conexão com o servidor usando o host e a porta fornecidos
-    #     self.socket.connect((self.host, self.port))
-    
-    # # Fecha o socket
-    # def stop(self):
-    #     self.socket.close()
-    #     print("Socket closed.")
-
     def send_vectors_to_server(self, vector_x, vector_y):
         # Validação dos vetores
         if len(vector_x) != len(vector_y):
