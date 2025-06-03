@@ -2,11 +2,20 @@ import threading
 import socket
 
 class Solver:
-    def __init__(self, host='localhost', port=8080, number_of_retries=5):
-        self.host = host
-        self.port = port
+    def __init__(self, servers=[('localhost', 8080), ('localhost', 8081)], number_of_retries=5):
+        self.servers = servers
         self.number_of_retries = number_of_retries
+        self.lock = threading.Lock()
+        self.server_index = 0
 
+    # Método para obter o próximo servidor da lista de servidores
+    def __get_next_server(self):
+        # Usa um lock para garantir que o acesso ao índice do servidor seja thread-safe
+        with self.lock:
+            server = self.servers[self.server_index]
+            self.server_index = (self.server_index + 1) % len(self.servers)
+            return server
+        
     def send_vectors_to_server(self, vector_x, vector_y):
         # Validação dos vetores
         if len(vector_x) != len(vector_y):
@@ -19,37 +28,39 @@ class Solver:
         # Envia a mensagem com os vetores para o servidor resolver
         message = f"{vector_x_str};{vector_y_str}"
 
-        # Criar socket temporário para esta thread
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((self.host, self.port))
-            sock.sendall(message.encode())
+        retries = 0
+        while retries < self.number_of_retries:
+            # Pega um servidor diferente a cada chamada
+            host, port = self.__get_next_server()
+            try:
+                # Criar socket temporário para esta thread
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    sock.connect((host, port))
+                    sock.sendall(message.encode())
 
-            # Recebe a resposta do servidor
-            print("Waiting for response from server...")
-            data = sock.recv(1024)
-            retries = 0
-            # Tenta receber a resposta do servidor, com um número máximo de tentativas
-            while retries < self.number_of_retries and not data:
-                print(f"Retry {retries + 1}/{self.number_of_retries}: No data received, retrying...")
-                data = sock.recv(1024)
+                    # Recebe a resposta do servidor
+                    print("Waiting for response from server...")
+                    data = sock.recv(1024)
+
+                    # Caso receba dados, converte a resposta recebida do servidor de volta para um número float
+                    if data:
+                        response = float(data.decode())
+                        print(f"Response from server ({host}:{port}): {response}")
+                        return response
+                    
+                    # Se não receber dados, tenta novamente até o número máximo de tentativas
+                    else:
+                        print(f"Retry {retries}/{self.number_of_retries}: No data received from server, raising exception.")
+                        print("Exception occurred during multiplication of vectors: ")
+                        print(f"Vector X: {vector_x}, Vector Y: {vector_y}")
+                        raise Exception("No data received from server after multiple retries.")
+
+            except Exception as e:
+                print(f"[{host}:{port}] Tentativa {retries+1} falhou: {e}")
                 retries += 1
-                print("Waiting for response from server...")
 
-            # Se não receber dados após o número máximo de tentativas, levanta uma exceção
-            if not data:
-                print(f"Retry {retries}/{self.number_of_retries}: No data received from server, raising exception.")
-                print("Exception occurred during multiplication of vectors: ")
-                print(f"Vector X: {vector_x}, Vector Y: {vector_y}")
-                raise Exception("No data received from server after multiple retries.")
-            
-            print("Response received from server!")
-            # Converte a resposta recebida do servidor de volta para um número float
-            response = float(data.decode())
-            print(f"Response from server: {response}")
-            # Retorna o resultado da multiplicação
-            return response
-        
-        raise Exception("Failed to connect to the server or receive data.")
+        # Se não receber dados após o número máximo de tentativas, levanta uma exceção
+        raise Exception("Failed to connect to any server after multiple retries.")
 
         
 
