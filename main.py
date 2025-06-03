@@ -23,7 +23,7 @@ result = solver.multiply_matrices(M_1, M_2)
 print("Resultado da multiplicação:")
 for row in result:
     print(row)
-print(f"Tempo de execução paralelo: {time.time() - tempo_paraleo:.2f} segundos")
+print(f"Tempo de execução paralelo: {time.time() - tempo_paraleo:.6f} segundos")
 
 tempo_serial = time.time()
 result_serial = []
@@ -34,4 +34,4 @@ for i in range(len(M_1)):
         for k in range(len(M_2)):
             result_serial[i][j] += M_1[i][k] * M_2[k][j]
 
-print(f"Tempo de execução serial: {time.time() - tempo_serial:.2f} segundos")
+print(f"Tempo de execução serial: {time.time() - tempo_serial:.6f} segundos")
